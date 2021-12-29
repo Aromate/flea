@@ -1,0 +1,5 @@
+SDK=x86_64-multilib-linux-gnu
+MARCH=x86-64
+PROFILE_MARCH=default/linux/amd64/17.1
+BOARD=initramfs
+# CONFIG=initramfs
