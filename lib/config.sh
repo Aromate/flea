@@ -12,87 +12,97 @@ create_rootfs() {
   cp -f --archive /dev/{null,console,tty} $ROOTFS/dev 2>/dev/null 1>&2
 }
 
-_clone() {
-  local repository=$1
-  local name=$(echo $1 | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1)
-  if [[ ! -d $ROOTFS/var/db/repos/$name ]]; then
-    git clone $repository $ROOTFS/var/db/repos/$name
+_makeconf() {
+  local file=$ROOTFS/etc/portage/make.conf
+  local pkgdir="$ROOTFS/var/cache/binpkgs"
+  # clean space
+  sed -i -r 's/[ ]+"/ "/g' $file
+  # config COMMON_FLAGS's march
+  sed -i -r 's/(-march)=([^ "]+)/\1='$MARCH'/g' $file
+  # config cbuild
+  sed -i -r 's/CBUILD.*/CBUILD="'$SDK'"/g' $file
+  # config pkgdir
+  sed -i -r 's,(PKGDIR=").*",\1'${pkgdir}'",g' $file
+  # config makeopts
+  local thread="-j$(nproc)"
+  sed -i -r 's/(MAKEOPTS=".*?[ "]*)\-j[1-9]+/\1'${thread}'/g' $file
+  if [[ $(grep -E 'MAKEOPTS=".*\-j[1-9]*' $file) == "" ]]; then
+    sed -i -r 's/(MAKEOPTS=")/\1'${thread}' /g' $file
   fi
 }
 
-_pull() {
-  local name=$(echo $1 | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1)
-  local path=$(pwd)
-  cd $ROOTFS/var/db/repos/$name
-    
-  git pull
-  cd $path
-}
+_repository() {
+  local overlay=$1
+  local overlay_type=$2
+  local overlay_uri=$3
+  # check repository exists
+  if [[ $(eselect repository list -i | grep $overlay) == "" ]]; then
+    if [[ -d /var/db/repos/$overlay ]]; then
+      echo "Please check host system overlay,the $overlay's dir exists."
+      exit 1
+    fi
+    eselect repository add $overlay $overlay_type $overlay_uri
+  fi
 
-update_overlay() {
-  # only update $curio
-  _pull $curio
-}
-
-    
-_makeconf() {
-  cat >$ROOTFS/etc/portage/make.conf <<EOF
-  # config 
-  MAKEOPTS="-j$(nproc)"
-  COMMON_FLAGS="-O2 -pipe -march=$MARCH"
-  CFLAGS="\${COMMON_FLAGS}"
-  CXXFLAGS="\${COMMON_FLAGS}"
-  FCFLAGS="\${COMMON_FLAGS}"
-  FFLAGS="\${COMMON_FLAGS}"
-  CBUILD="$SDK"
-
-  # bindist flag
-  # Gentoo overlay is different
-  PORTDIR="/var/db/repos/gentoo"
-  DISTDIR="/var/cache/distfiles"
-  PKGDIR="$ROOTFS/var/cache/binpkgs"
-
-  # config portage tmp dir
-  # PORTAGE_TMPDIR="$ROOTFS/tmp"
-  PORTAGE_TMPDIR="/tmp"
+  # add repository config to $ROOTFS/etc/portage/repos.conf
+  if [[ ! -d /var/db/repos/$overlay ]]; then
+    echo "Please check overlay $overlay's dir, in /var/db/repos..."
+    exit 1
+  fi
+  if [[ ! -f $ROOTFS/etc/portage/repos.conf/$overlay.conf ]]; then
+    cat >$ROOTFS/etc/portage/repos.conf/$overlay.conf <<EOF
+[$overlay]
+location = /var/db/repos/$overlay
 EOF
+  fi
 }
 
-_repos() {
-  local name=$1
-  cat >$ROOTFS/etc/portage/repos.conf/$name.conf <<EOF
-  [$name]
-  location = /var/db/repos/$name
-EOF
-}
-
-# _profiles config the /etc/portage
 _profiles() {
-  # make.conf
+  if [[ ! -L $ROOTFS/etc/portage ]]; then
+    rm -rf $ROOTFS/etc/portage
+    # ln to /etc/portage
+    if [[ ! -d $FLEA_DIR/profiles ]]; then
+      echo "Please check flea status,flea's profiles is not exists."
+      exit 1
+    fi
+    ln -sf $FLEA_DIR/profiles $ROOTFS/etc/portage
+  fi
+
+  # config /etc/portage/make.conf
   _makeconf
-  # ln make.profile, important
-  ln -sf $PROFILE_MARCH $ROOTFS/etc/portage/make.profile
-  # config package.use package.license
-  cp -r $PROFILES/package.* $ROOTFS/etc/portage/
-}
-
-# Config portage,about overlay deployment,and overlay config
-config_portage() {
-
-  # create portage config tree
-  mkdir -p $ROOTFS/etc/portage/repos.conf
 
   # deployment overlay: gentoo, curio, board
   if [[ ! -d $ROOTFS/var/db/repos ]]; then
     mkdir -p $ROOTFS/var/db/repos
   fi
+
+  # deploy gentoo overlay,gentoo is different
+  # gentoo overlay can use ln make.profile to sure the overlay exists
   if [[ ! -L $ROOTFS/var/db/repos/gentoo ]]; then
     rm -rf $ROOTFS/var/db/repos/gentoo # clean
-    ln -sf /var/db/repos/gentoo $ROOTFS/var/db/repos/gentoo
+    if [[ ! -L $ROOTFS/var/db/repos/gentoo ]]; then
+      ln -sf /var/db/repos/gentoo $ROOTFS/var/db/repos/gentoo
+    fi
+
+    if [[ ! -L $ROOTFS/etc/portage/make.profile ]]; then
+      # ln make.profile, need $ROOTFS/var/db/repos/gentoo
+      if [[ ! -d $PROFILE_MARCH ]]; then
+        ln -sf $PROFILE_MARCH $ROOTFS/etc/portage/make.profile
+      else
+        echo $PROFILE_MARCH is not a dir,can not link make.profile,please check...
+        exit 1
+      fi
+    fi
   fi
-  _repos gentoo
-  _repos curio
-  _repos board
+
+  # config the overlays
+  # _repository gentoo
+  _repository curio git https://github.com/ErGog/curio.git
+  _repository board git https://github.com/ErGog/board.git
+}
+
+# Config portage,about overlay deployment,and overlay config
+config_portage() {
 
   # Config overlays configs,and config portage profiles
   _profiles # config profiles like make.conf,make.profiles,package.*

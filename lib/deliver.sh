@@ -21,8 +21,8 @@ else
   ROOTFS=${FLEA_DIR}/build/${BOARD}
 fi
 
-# PROFILE_MARCH=${ROOTFS}/etc/portage/../../var/db/repos/gentoo/profiles/${PROFILE_MARCH}
-PROFILE_MARCH=../../var/db/repos/gentoo/profiles/${PROFILE_MARCH}
+PROFILE_MARCH=${ROOTFS}/var/db/repos/gentoo/profiles/${PROFILE_MARCH}
+# PROFILE_MARCH=../../var/db/repos/gentoo/profiles/${PROFILE_MARCH}
 PROFILES=${FLEA_DIR}/profiles
 
 # check environment,make sure git, sudo access.
