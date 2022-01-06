@@ -1,5 +1,5 @@
-SDK=x86_64-multilib-linux-gnu
-MARCH=x86-64
-PROFILE_MARCH=default/linux/amd64/17.1
-BOARD=initramfs
+CHOST=aarch64-gentoo-linux-gnu
+MARCH=armv8-a
+PROFILE_MARCH=default/linux/arm64/17.0
+BOARD=test
 # CONFIG=initramfs

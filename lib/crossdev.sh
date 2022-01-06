@@ -29,8 +29,8 @@ init_crossdev() {
 }
 
 create_sdk() {
-  if [[ $(ls /usr | grep $SDK) == "" ]]; then
-    sudo crossdev --stable -t $SDK ||
+  if [[ $(ls /usr | grep $CHOST) == "" ]]; then
+    crossdev --stable -t $CHOST ||
       (echo "Can not install crossdev sdk..." && exit 1)
   fi
 }

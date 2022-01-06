@@ -6,7 +6,7 @@ set_var() {
   # https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
   if [[ ${!1} == "" ]]; then
     local var=$(cat $FLEA_DIR/sdk_config | grep -w $1 | cut -d '=' -f 2)
-    if [[ $(cat $FLEA_DIR/sdk_config | grep $1) =~ "#" ]]; then
+    if [[ $(cat $FLEA_DIR/sdk_config |grep -v "#" | grep $1) == "" ]]; then
       return
     fi
     if [[ $var != "" ]]; then

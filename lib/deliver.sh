@@ -8,7 +8,7 @@ FLEA_DIR=$(cd $SCRIPT_DIR/../ && pwd)
 
 # Define sdk,march,board,profile_march to config the board env,and check it
 check_var SCRIPT_NAME || exit 1
-set_var SDK && check_var SDK
+set_var CHOST && check_var CHOST
 set_var MARCH && check_var MARCH
 set_var BOARD && check_var BOARD
 set_var PROFILE_MARCH && check_var PROFILE_MARCH

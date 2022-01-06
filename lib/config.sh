@@ -12,17 +12,50 @@ create_rootfs() {
   cp -f --archive /dev/{null,console,tty} $ROOTFS/dev 2>/dev/null 1>&2
 }
 
+_pkgconfig () {
+  # bug:Can not found some library
+  cat >$ROOTFS/bin/pkg-config <<EOF
+#!/bin/bash
+
+PKG_CONFIG_LIBDIR=$(printf '%s:' "${ROOTFS}"/usr/*/pkgconfig)
+export PKG_CONFIG_LIBDIR
+
+export PKG_CONFIG_SYSROOT_DIR="${ROOTFS}"
+
+# Portage will get confused and try to "help" us by exporting this.
+# Undo that logic.
+unset PKG_CONFIG_PATH
+
+# Use full path to bypass automated wrapper checks that block `pkg-config`.
+# https://crbug.com/985180
+exec /usr/bin/pkg-config "\$@"
+EOF
+chmod +x $ROOTFS/bin/pkg-config
+}
+
 _makeconf() {
   local file=$ROOTFS/etc/portage/make.conf
   local pkgdir="$ROOTFS/var/cache/binpkgs"
+  local pkg_config="$ROOTFS/bin/pkg-config"
   # clean space
   sed -i -r 's/[ ]+"/ "/g' $file
   # config COMMON_FLAGS's march
   sed -i -r 's/(-march)=([^ "]+)/\1='$MARCH'/g' $file
   # config cbuild
-  sed -i -r 's/CBUILD.*/CBUILD="'$SDK'"/g' $file
+  if [[ -z $(grep 'CHOST' $file) ]]; then
+    echo "CHOST=\"${CHOST}\"" >> $file
+  fi
+  sed -i -r 's/CHOST.*/CHOST="'$CHOST'"/g' $file
   # config pkgdir
-  sed -i -r 's,(PKGDIR=").*",\1'${pkgdir}'",g' $file
+  # sed -i -r 's,(PKGDIR=").*",\1'${pkgdir}'",g' $file
+
+  # config pkg_config
+  _pkgconfig # google fix the library
+  if [[ -z $(grep 'PKG_CONFIG' $file) ]]; then
+    echo "PKG_CONFIG=\"${pkg_config}\"" >> $file
+  fi
+  sed -i -r 's,(PKG_CONFIG=").*",\1'${pkg_config}'",g' $file
+
   # config makeopts
   local thread="-j$(nproc)"
   sed -i -r 's/(MAKEOPTS=".*?[ "]*)\-j[1-9]+/\1'${thread}'/g' $file
@@ -84,15 +117,9 @@ _profiles() {
       ln -sf /var/db/repos/gentoo $ROOTFS/var/db/repos/gentoo
     fi
 
-    if [[ ! -L $ROOTFS/etc/portage/make.profile ]]; then
-      # ln make.profile, need $ROOTFS/var/db/repos/gentoo
-      if [[ ! -d $PROFILE_MARCH ]]; then
-        ln -sf $PROFILE_MARCH $ROOTFS/etc/portage/make.profile
-      else
-        echo $PROFILE_MARCH is not a dir,can not link make.profile,please check...
-        exit 1
-      fi
-    fi
+    # ln make.profile, need $ROOTFS/var/db/repos/gentoo
+    rm -rf $ROOTFS/etc/portage/make.profile
+    ln -sf $PROFILE_MARCH $ROOTFS/etc/portage/make.profile
   fi
 
   # config the overlays
